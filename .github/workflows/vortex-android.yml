@@ -11,12 +11,12 @@ permissions:
 
 jobs:
   build-android:
-    name: Build Android APK
+    name: Build Vortex Android APK
     runs-on: ubuntu-latest
 
     steps:
 
-      - name: Checkout Vortex Engine
+      - name: Checkout project
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -25,39 +25,56 @@ jobs:
           node-version: '20'
           package-manager-cache: false
 
-      - name: Check project
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Find Vortex HTML
         shell: bash
         run: |
-          echo "===== PROJECT FILES ====="
-          ls -la
+          echo "Searching for HTML game..."
 
-          echo "===== WWW ====="
-          if [ -d "www" ]; then
-            ls -la www
-          else
-            echo "WARNING: www folder not found"
+          FOUND=$(find . \
+            -type f \
+            -iname "*.html" \
+            ! -path "./.git/*" \
+            ! -path "./node_modules/*" \
+            | head -n 1)
+
+          if [ -z "$FOUND" ]; then
+            echo ""
+            echo "======================================"
+            echo "ERROR: No HTML game was found!"
+            echo "======================================"
+            echo ""
+            echo "Upload your Vortex Engine HTML file"
+            echo "to the GitHub repository first."
+            echo ""
+            exit 1
           fi
 
-      - name: Create package.json if missing
+          echo "Found:"
+          echo "$FOUND"
+
+          mkdir -p www
+
+          cp "$FOUND" www/index.html
+
+          echo ""
+          echo "Vortex game copied to:"
+          echo "www/index.html"
+
+      - name: Create package.json
         shell: bash
         run: |
           if [ ! -f package.json ]; then
-            echo "package.json not found - creating one..."
-
             cat > package.json <<'EOF'
           {
             "name": "vortex-engine",
             "version": "1.0.0",
-            "private": true,
-            "scripts": {
-              "build": "echo Vortex Engine"
-            },
-            "dependencies": {
-              "@capacitor/core": "^6.2.0"
-            },
-            "devDependencies": {
-              "@capacitor/cli": "^6.2.0"
-            }
+            "private": true
           }
           EOF
           fi
@@ -65,74 +82,41 @@ jobs:
       - name: Install Capacitor
         shell: bash
         run: |
-          npm install
           npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
 
-      - name: Prepare web folder
+      - name: Create Capacitor configuration
         shell: bash
         run: |
-          if [ ! -d "www" ]; then
-            mkdir -p www
-
-            if [ -f "index.html" ]; then
-              cp index.html www/index.html
-            else
-              echo "ERROR: No index.html or www/index.html found"
-              exit 1
-            fi
-          fi
-
-      - name: Create Capacitor config if missing
-        shell: bash
-        run: |
-          if [ ! -f capacitor.config.json ]; then
-            cat > capacitor.config.json <<'EOF'
+          cat > capacitor.config.json <<'EOF'
           {
             "appId": "com.vortexengine.game",
             "appName": "Vortex Engine",
             "webDir": "www"
           }
           EOF
-          fi
 
-      - name: Add Android platform
+      - name: Create Android project
         shell: bash
         run: |
-          if [ ! -d "android" ]; then
-            npx cap add android
-          else
-            echo "Android platform already exists"
-          fi
+          npx cap add android
 
-      - name: Sync Capacitor
+      - name: Sync Android
         shell: bash
         run: |
           npx cap sync android
-
-      - name: Setup Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
 
       - name: Make Gradle executable
         shell: bash
         run: |
           chmod +x android/gradlew
 
-      - name: Build Debug APK
+      - name: Build APK
         working-directory: android
         shell: bash
         run: |
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleDebug --no-daemon
 
-      - name: Find APK
-        shell: bash
-        run: |
-          echo "===== APK FILES ====="
-          find android/app/build/outputs -type f -name "*.apk" -print
-
-      - name: Upload Vortex APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Vortex-Engine-Android-APK
