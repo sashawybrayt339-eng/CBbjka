@@ -75,6 +75,11 @@ jobs:
           st.write_text(t)
           PY
 
+      - name: Set landscape orientation
+        run: |
+          sed -i '0,/<activity/s//<activity android:screenOrientation="sensorLandscape"/' android/app/src/main/AndroidManifest.xml
+          grep -n "screenOrientation" android/app/src/main/AndroidManifest.xml
+
       - name: Build debug APK
         working-directory: android
         run: |
