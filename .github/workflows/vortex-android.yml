@@ -16,60 +16,113 @@ jobs:
 
     steps:
 
-      - name: Checkout project
+      # -----------------------------
+      # 1. دریافت Repository
+      # -----------------------------
+      - name: Checkout
         uses: actions/checkout@v4
 
+      # -----------------------------
+      # 2. Node.js
+      # -----------------------------
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
           package-manager-cache: false
 
+      # -----------------------------
+      # 3. Java 17
+      # -----------------------------
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
+      # -----------------------------
+      # 4. پیدا کردن فایل Vortex
+      # -----------------------------
       - name: Find Vortex HTML
         shell: bash
         run: |
-          echo "Searching for HTML game..."
 
+          echo "======================================"
+          echo " Searching for Vortex HTML"
+          echo "======================================"
+
+          mkdir -p www
+
+          FOUND=""
+
+          # HTML واقعی
           FOUND=$(find . \
             -type f \
-            -iname "*.html" \
+            \( \
+              -iname "*.html" \
+              -o -iname "*.htm" \
+            \) \
             ! -path "./.git/*" \
             ! -path "./node_modules/*" \
             | head -n 1)
 
+          # اگر فایل با .html.txt ذخیره شده باشد
           if [ -z "$FOUND" ]; then
+            FOUND=$(find . \
+              -type f \
+              -iname "*.html.txt" \
+              ! -path "./.git/*" \
+              ! -path "./node_modules/*" \
+              | head -n 1)
+          fi
+
+          # اگر پیدا شد
+          if [ -n "$FOUND" ]; then
+
+            echo "HTML FOUND:"
+            echo "$FOUND"
+
+            cp "$FOUND" www/index.html
+
+          else
+
             echo ""
             echo "======================================"
-            echo "ERROR: No HTML game was found!"
+            echo " NO HTML FILE FOUND"
             echo "======================================"
             echo ""
+
+            echo "Files in repository:"
+            find . \
+              -type f \
+              ! -path "./.git/*" \
+              ! -path "./node_modules/*" \
+              | head -n 200
+
+            echo ""
+            echo "======================================"
+            echo "ERROR"
+            echo "======================================"
             echo "Upload your Vortex Engine HTML file"
-            echo "to the GitHub repository first."
+            echo "to the repository."
             echo ""
+
             exit 1
           fi
 
-          echo "Found:"
-          echo "$FOUND"
-
-          mkdir -p www
-
-          cp "$FOUND" www/index.html
-
           echo ""
-          echo "Vortex game copied to:"
-          echo "www/index.html"
+          echo "Web directory:"
+          ls -lah www
 
+      # -----------------------------
+      # 5. ساخت package.json
+      # -----------------------------
       - name: Create package.json
         shell: bash
         run: |
+
           if [ ! -f package.json ]; then
+
             cat > package.json <<'EOF'
           {
             "name": "vortex-engine",
@@ -77,48 +130,99 @@ jobs:
             "private": true
           }
           EOF
+
           fi
 
+      # -----------------------------
+      # 6. نصب Capacitor
+      # -----------------------------
       - name: Install Capacitor
         shell: bash
         run: |
-          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
 
-      - name: Create Capacitor configuration
+          npm install \
+            @capacitor/core@6 \
+            @capacitor/cli@6 \
+            @capacitor/android@6
+
+      # -----------------------------
+      # 7. تنظیم Capacitor
+      # -----------------------------
+      - name: Create Capacitor Config
         shell: bash
         run: |
+
           cat > capacitor.config.json <<'EOF'
           {
             "appId": "com.vortexengine.game",
             "appName": "Vortex Engine",
-            "webDir": "www"
+            "webDir": "www",
+            "bundledWebRuntime": false
           }
           EOF
 
-      - name: Create Android project
+      # -----------------------------
+      # 8. ساخت پروژه Android
+      # -----------------------------
+      - name: Add Android Platform
         shell: bash
         run: |
+
           npx cap add android
 
-      - name: Sync Android
+      # -----------------------------
+      # 9. Sync
+      # -----------------------------
+      - name: Sync Capacitor
         shell: bash
         run: |
+
           npx cap sync android
 
-      - name: Make Gradle executable
+      # -----------------------------
+      # 10. دسترسی Gradle
+      # -----------------------------
+      - name: Make Gradle Executable
         shell: bash
         run: |
+
           chmod +x android/gradlew
 
-      - name: Build APK
+      # -----------------------------
+      # 11. ساخت APK
+      # -----------------------------
+      - name: Build Debug APK
         working-directory: android
         shell: bash
         run: |
-          ./gradlew assembleDebug --no-daemon
 
+          ./gradlew assembleDebug \
+            --no-daemon \
+            --stacktrace
+
+      # -----------------------------
+      # 12. نمایش APK
+      # -----------------------------
+      - name: Check APK
+        shell: bash
+        run: |
+
+          echo "======================================"
+          echo " APK FILES"
+          echo "======================================"
+
+          find android/app/build/outputs \
+            -type f \
+            -name "*.apk" \
+            -print
+
+      # -----------------------------
+      # 13. آپلود APK
+      # -----------------------------
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Vortex-Engine-Android-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+          retention-days: 30
